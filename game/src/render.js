@@ -109,11 +109,11 @@ export function createRenderer(canvas) {
     ctx.beginPath();
     ctx.arc(1120, 92, 34, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#e8dcb4';
+    ctx.fillStyle = '#e9dfba';
     ctx.beginPath();
-    ctx.arc(1108, 84, 7, 0, Math.PI * 2);
-    ctx.arc(1130, 100, 5, 0, Math.PI * 2);
-    ctx.arc(1122, 78, 4, 0, Math.PI * 2);
+    ctx.arc(1106, 80, 5, 0, Math.PI * 2);
+    ctx.arc(1133, 102, 4, 0, Math.PI * 2);
+    ctx.arc(1125, 72, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = COLORS.seaShimmer;
     ctx.lineWidth = 2;
@@ -216,6 +216,35 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
+  /** The bright bite where the beam meets the nearest burning shadow. */
+  function drawBeamImpact(state) {
+    if (!state.beamOn) return;
+    let target = null;
+    let nearest = Infinity;
+    for (const enemy of state.enemies) {
+      if (enemy.burning <= 0) continue;
+      const distance = Math.hypot(enemy.x - LIGHTHOUSE.x, enemy.y - LIGHTHOUSE.y);
+      if (distance < nearest) {
+        nearest = distance;
+        target = enemy;
+      }
+    }
+    if (!target) return;
+    const flicker = 0.85 + 0.15 * Math.sin(state.time * 37);
+    const radius = target.radius * 2.1;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(target.x, target.y, 2, target.x, target.y, radius);
+    glow.addColorStop(0, `rgba(255,250,224,${0.85 * flicker})`);
+    glow.addColorStop(0.4, `rgba(255,217,122,${0.45 * flicker})`);
+    glow.addColorStop(1, 'rgba(255,191,71,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function drawLighthouse(state) {
     const { x, y } = LIGHTHOUSE;
     const pulse = 0.85 + 0.15 * Math.sin(state.time * 2.4);
@@ -257,9 +286,11 @@ export function createRenderer(canvas) {
     const type = ENEMY_TYPES[enemy.kind];
     const squash = 1 + 0.08 * Math.sin(state.time * 5 + enemy.wobblePhase);
     const burning = enemy.burning > 0;
+    // A fresh hit makes the shadow flinch outward for a blink.
+    const flinch = 1 + Math.max(0, enemy.flash) * 1.6;
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
-    ctx.scale(1, squash);
+    ctx.scale(flinch, squash * flinch);
     const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, enemy.radius * 2.4);
     glow.addColorStop(0, type.color);
     glow.addColorStop(0.55, `${type.color}aa`);
@@ -426,7 +457,9 @@ export function createRenderer(canvas) {
     text(`${Math.ceil(state.hp)} / ${state.hpMax}`, 334, FIELD.height - 35, 17, COLORS.text, 'left');
     const oilLabel = state.beamLocked ? 'OIL · RECHARGING' : 'OIL';
     text(oilLabel, FIELD.width - 24, FIELD.height - 58, 17, state.beamLocked ? COLORS.danger : COLORS.textDim, 'right', 800);
-    bar(FIELD.width - 324, FIELD.height - 46, 300, 20, state.oil / state.oilMax, COLORS.oil, 'rgba(8,12,28,0.8)', COLORS.panelEdge);
+    // While the lamp recharges, the oil bar throbs so the lock is unmissable.
+    const oilFlash = state.beamLocked && Math.sin(state.time * 8) > 0;
+    bar(FIELD.width - 324, FIELD.height - 46, 300, 20, state.oil / state.oilMax, oilFlash ? '#ff8c42' : COLORS.oil, 'rgba(8,12,28,0.8)', oilFlash ? COLORS.danger : COLORS.panelEdge);
     if (state.modifiers.pulseLevel > 0) {
       const ready = state.pulseCooldown <= 0;
       const label = ready ? 'E · SHOCKWAVE READY' : `E · SHOCKWAVE ${Math.ceil(state.pulseCooldown)}s`;
@@ -634,12 +667,18 @@ export function createRenderer(canvas) {
     dimOverlay(0.6);
     if (won) {
       const glow = ctx.createRadialGradient(FIELD.width / 2, 240, 10, FIELD.width / 2, 240, 340);
-      glow.addColorStop(0, 'rgba(255,217,122,0.25)');
+      glow.addColorStop(0, 'rgba(255,217,122,0.32)');
       glow.addColorStop(1, 'rgba(255,217,122,0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, FIELD.width, FIELD.height);
     }
     text(won ? 'THE DAWN BREAKS' : 'THE LIGHT DIES', FIELD.width / 2, 172, 64, won ? COLORS.gold : COLORS.danger, 'center', 800);
+    ctx.strokeStyle = won ? COLORS.gold : COLORS.danger;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(FIELD.width / 2 - 90, 206);
+    ctx.lineTo(FIELD.width / 2 + 90, 206);
+    ctx.stroke();
     text(
       won ? 'You kept the lighthouse burning through all 10 waves.' : `The shadows reached the lighthouse on wave ${state.wave}.`,
       FIELD.width / 2,
@@ -671,7 +710,7 @@ export function createRenderer(canvas) {
   function drawPause() {
     dimOverlay(0.55);
     text('PAUSED', FIELD.width / 2, 320, 56, COLORS.text, 'center', 800);
-    text('Press P or click to keep playing · M toggles sound', FIELD.width / 2, 372, 20, COLORS.textDim, 'center', 400);
+    text('Press P or click to keep playing · R restarts the run · M toggles sound', FIELD.width / 2, 372, 20, COLORS.textDim, 'center', 400);
   }
 
   function drawVignette() {
@@ -701,10 +740,20 @@ export function createRenderer(canvas) {
     const sorted = [...state.enemies].sort((a, b) => a.y - b.y);
     for (const enemy of sorted) drawEnemy(enemy, state);
     drawLighthouse(state);
+    drawBeamImpact(state);
     drawEffects(state);
     drawVignette();
     if (state.hurtFlash > 0) {
       ctx.fillStyle = `rgba(255,60,60,${Math.min(0.3, state.hurtFlash)})`;
+      ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+    }
+    // Low hull: the edges of the night throb red until the keeper recovers.
+    if (state.hp > 0 && state.hp / state.hpMax <= 0.3 && (screen === SCREEN_PLAY || screen === SCREEN_UPGRADE || screen === SCREEN_PAUSE)) {
+      const throb = 0.1 + 0.07 * Math.sin(state.time * 4);
+      const edge = ctx.createRadialGradient(FIELD.width / 2, FIELD.height / 2, FIELD.height * 0.34, FIELD.width / 2, FIELD.height / 2, FIELD.height * 0.78);
+      edge.addColorStop(0, 'rgba(255,40,40,0)');
+      edge.addColorStop(1, `rgba(255,40,40,${throb})`);
+      ctx.fillStyle = edge;
       ctx.fillRect(0, 0, FIELD.width, FIELD.height);
     }
     if (screen === SCREEN_PLAY || screen === SCREEN_UPGRADE || screen === SCREEN_PAUSE) {

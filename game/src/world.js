@@ -5,7 +5,7 @@
 // the same controls always play the same game.
 
 import { BEAM, COLORS, COMBO, FIELD, HULL, LIGHTHOUSE, OIL, PULSE, TOTAL_WAVES, WAVES } from './config.js';
-import { damageEnemy, emberCountFor, spawnEnemy, splitEnemy, spreadAngle, walkEnemy } from './enemies.js';
+import { damageEnemy, emberCountFor, ENEMY_TYPES, spawnEnemy, splitEnemy, spreadAngle, walkEnemy } from './enemies.js';
 import { applyUpgrade, createModifiers, rollUpgradeChoices } from './upgrades.js';
 import { hasNextWave, waveBanner, waveComposition } from './waves.js';
 import { burst, createEffects, floatText, mote, ring, stepEffects } from './particles.js';
@@ -106,14 +106,24 @@ export function createWorld(random) {
   function killEnemy(enemy, events) {
     enemy.dead = true;
     state.kills += 1;
+    const prevMultiplier = Math.min(COMBO.maxMultiplier, 1 + Math.floor(state.combo / 3));
     state.combo += 1;
     state.comboTimer = COMBO.windowSeconds;
     const multiplier = Math.min(COMBO.maxMultiplier, 1 + Math.floor(state.combo / 3));
     state.bestCombo = Math.max(state.bestCombo, state.combo);
     const gained = enemy.score * multiplier;
     state.score += gained;
+    // A rising multiplier deserves its own shout, centred above the fight.
+    if (multiplier > prevMultiplier && multiplier > 1) {
+      floatText(state.effects, FIELD.width / 2, 150, `COMBO x${multiplier}!`, COLORS.gold, 30);
+    }
     floatText(state.effects, enemy.x, enemy.y - enemy.radius, `+${gained}`, multiplier > 1 ? COLORS.gold : COLORS.text, multiplier > 1 ? 24 : 19);
     burst(state.effects, enemy.x, enemy.y, enemy.kind === 'boss' ? COLORS.boss : COLORS.ember, enemy.kind === 'boss' ? 46 : 14, 170, random);
+    // Big kills ring out; small ones just thump the screen a hair.
+    if (enemy.kind === 'hulk' || enemy.kind === 'splitter') {
+      ring(state.effects, enemy.x, enemy.y, ENEMY_TYPES[enemy.kind].color, 130, 0.45);
+    }
+    state.shake = Math.min(16, state.shake + 1.2);
     if (enemy.kind === 'splitter') {
       for (const mini of splitEnemy(enemy, state.wave, random)) state.enemies.push(mini);
     }
@@ -150,6 +160,8 @@ export function createWorld(random) {
     state.choices = rollUpgradeChoices(state.wave, state.upgradesTaken, random);
     state.phase = 'upgrade';
     state.beamOn = false;
+    // The clear itself celebrates: a gold ring rolls out from the lighthouse.
+    ring(state.effects, LIGHTHOUSE.x, LIGHTHOUSE.y, COLORS.gold, 320, 0.7);
     // Clearing a wave lets the keeper catch a breath: a little hull patched,
     // a little oil poured back, before the next choice is made.
     state.hp = Math.min(state.hpMax, state.hp + 8);
@@ -254,9 +266,13 @@ export function createWorld(random) {
           state.lastSpawnAngle = spreadAngle(random, state.lastSpawnAngle);
           const enemy = spawnEnemy(next.kind, state.lastSpawnAngle, state.wave, random, 640);
           state.enemies.push(enemy);
+          // Every shadow tears in through a ripple, so spawns never pop.
+          ring(state.effects, enemy.x, enemy.y, ENEMY_TYPES[next.kind].color, 70, 0.4);
           if (next.kind === 'boss') {
             state.boss = enemy;
             events |= EVENT_BOSS;
+            state.shake = Math.min(16, state.shake + 8);
+            ring(state.effects, enemy.x, enemy.y, COLORS.boss, 220, 0.7);
             state.banner = { title: 'THE HOLLOW KING', sub: 'Burn it down before it reaches the light.', timer: 3 };
           }
           state.spawnTimer = next.delay;

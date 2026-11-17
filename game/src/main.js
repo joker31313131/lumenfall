@@ -35,7 +35,11 @@ const params = new URLSearchParams(window.location.search);
 const shotScene = params.get('shot');
 if (shotScene && SHOT_SEEDS[shotScene] !== undefined) {
   const renderer = createRenderer(canvas);
-  const world = createWorld(createRandom(SHOT_SEEDS[shotScene]));
+  // ?seed=<n> restages the same scene under another fixed seed, for picking
+  // the best cover frame; without it the shipped seed is used.
+  const seedParam = params.get('seed');
+  const seed = seedParam !== null && Number.isFinite(Number(seedParam)) ? Number(seedParam) >>> 0 : SHOT_SEEDS[shotScene];
+  const world = createWorld(createRandom(seed));
   world.reset(shotScene === 'title');
   const staged = stageShot(world, shotScene);
   const screens = { title: SCREEN_TITLE, play: SCREEN_PLAY, upgrade: SCREEN_UPGRADE, win: SCREEN_WIN, over: SCREEN_OVER };
@@ -84,9 +88,12 @@ function runGame() {
     if (events & EVENT_PICKUP) audio.ember();
     if (events & EVENT_HURT) audio.hurt();
     if (events & EVENT_WAVE_START) audio.waveHorn();
-    if (events & EVENT_BOSS) audio.waveHorn();
+    if (events & EVENT_BOSS) audio.roar();
     if (events & EVENT_PULSE) audio.pulse();
-    if (events & EVENT_UPGRADE) screen = SCREEN_UPGRADE;
+    if (events & EVENT_UPGRADE) {
+      audio.waveClear();
+      screen = SCREEN_UPGRADE;
+    }
     if (events & EVENT_WIN) {
       saveIfBest();
       audio.victory();

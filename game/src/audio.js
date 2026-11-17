@@ -138,6 +138,16 @@ export function createAudio() {
       noise(0.35, 0.32, 900);
       blip(220, 60, 0.3, 0.2, 'sine');
     },
+    /** The boss arriving: a low grinding roar, nothing like the wave horn. */
+    roar() {
+      noise(0.5, 0.3, 220);
+      blip(90, 42, 0.55, 0.26, 'sawtooth');
+    },
+    /** A wave cleared: two bright notes before the upgrade choice opens. */
+    waveClear() {
+      blip(659, 659, 0.12, 0.15, 'sine');
+      setTimeout(() => blip(880, 880, 0.2, 0.15, 'sine'), 110);
+    },
     click() {
       blip(660, 520, 0.06, 0.12, 'sine');
     },
